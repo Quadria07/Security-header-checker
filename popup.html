@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'" />
+  <title>Security Header Checker</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 360px;
+      font-family: 'Courier New', Courier, monospace;
+      background: #0f1117;
+      color: #e2e8f0;
+      padding: 16px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid #2d3748;
+      padding-bottom: 12px;
+    }
+
+    header h1 {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #a0aec0;
+      flex: 1;
+    }
+
+    .shield { font-size: 18px; }
+
+    .risk-badge {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 3px;
+      display: none;
+    }
+    .risk-badge.visible    { display: inline-block; }
+    .risk-low    { background: #1c4532; color: #68d391; border: 1px solid #68d391; }
+    .risk-medium { background: #4a2a0a; color: #f6ad55; border: 1px solid #f6ad55; }
+    .risk-high   { background: #4a1010; color: #fc8181; border: 1px solid #fc8181; }
+
+    .url-row {
+      background: #1a202c;
+      border: 1px solid #2d3748;
+      border-radius: 4px;
+      padding: 8px 10px;
+      margin-bottom: 14px;
+    }
+
+    .url-row .label {
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #718096;
+      margin-bottom: 3px;
+    }
+
+    .url-row .value {
+      font-size: 11px;
+      color: #cbd5e0;
+      word-break: break-all;
+    }
+
+    .section-label {
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #4a5568;
+      margin-bottom: 8px;
+    }
+
+    .checks {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .check-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 9px 10px;
+      background: #1a202c;
+      border: 1px solid #2d3748;
+      border-left-width: 3px;
+      border-radius: 4px;
+    }
+
+    .status-ok-row   { border-left-color: #68d391; }
+    .status-warn-row { border-left-color: #f6ad55; }
+    .status-fail-row { border-left-color: #fc8181; }
+    .status-info-row { border-left-color: #4a5568; }
+
+    .indicator {
+      font-size: 13px;
+      flex-shrink: 0;
+      margin-top: 1px;
+      width: 14px;
+      text-align: center;
+    }
+
+    .info { flex: 1; }
+
+    .check-name {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      margin-bottom: 3px;
+    }
+
+    .check-status {
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    .status-ok   { color: #68d391; }
+    .status-warn { color: #f6ad55; }
+    .status-fail { color: #fc8181; }
+    .status-info { color: #718096; }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #2d3748;
+      margin: 12px 0;
+    }
+
+    .warnings {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .warning-item {
+      font-size: 10px;
+      padding: 7px 10px;
+      background: #1a202c;
+      border-left: 3px solid #f6ad55;
+      border-radius: 4px;
+      color: #f6ad55;
+      line-height: 1.4;
+    }
+
+    .warning-item.critical {
+      border-left-color: #fc8181;
+      color: #fc8181;
+    }
+
+    .warning-item.pass {
+      border-left-color: #68d391;
+      color: #68d391;
+    }
+
+    .notice {
+      padding: 8px 10px;
+      background: #1a202c;
+      border-left: 2px solid #4a5568;
+      font-size: 10px;
+      color: #718096;
+      line-height: 1.5;
+    }
+
+    #loading {
+      text-align: center;
+      padding: 32px 0;
+      font-size: 11px;
+      color: #4a5568;
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <span class="shield" aria-hidden="true">🛡</span>
+    <h1>Security Header Checker</h1>
+    <span class="risk-badge" id="risk-badge"></span>
+  </header>
+
+  <div id="loading">Checking…</div>
+
+  <div id="results" hidden>
+
+    <div class="url-row">
+      <div class="label">Current URL</div>
+      <div class="value" id="url-display"></div>
+    </div>
+
+    <div class="section-label">Connection</div>
+    <div class="checks">
+      <div class="check-row status-info-row" id="row-https">
+        <span class="indicator" id="icon-https"></span>
+        <div class="info">
+          <div class="check-name">HTTPS</div>
+          <div class="check-status" id="status-https"></div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <div class="section-label">Response Headers</div>
+    <div class="checks">
+      <div class="check-row status-info-row" id="row-csp">
+        <span class="indicator" id="icon-csp"></span>
+        <div class="info">
+          <div class="check-name">Content-Security-Policy</div>
+          <div class="check-status" id="status-csp"></div>
+        </div>
+      </div>
+      <div class="check-row status-info-row" id="row-hsts">
+        <span class="indicator" id="icon-hsts"></span>
+        <div class="info">
+          <div class="check-name">Strict-Transport-Security</div>
+          <div class="check-status" id="status-hsts"></div>
+        </div>
+      </div>
+      <div class="check-row status-info-row" id="row-xfo">
+        <span class="indicator" id="icon-xfo"></span>
+        <div class="info">
+          <div class="check-name">X-Frame-Options</div>
+          <div class="check-status" id="status-xfo"></div>
+        </div>
+      </div>
+      <div class="check-row status-info-row" id="row-xcto">
+        <span class="indicator" id="icon-xcto"></span>
+        <div class="info">
+          <div class="check-name">X-Content-Type-Options</div>
+          <div class="check-status" id="status-xcto"></div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <div class="section-label">Cookie Security</div>
+    <div class="checks" id="cookie-checks"></div>
+
+    <hr class="divider" />
+
+    <div class="section-label">Security Insights</div>
+    <div class="warnings" id="warnings-list"></div>
+
+    <hr class="divider" />
+
+    <!-- Used for "reload page" notice when header data is not yet available -->
+    <p class="notice" id="footer-notice" hidden></p>
+
+    <p class="notice">
+      Cookie values are never read or stored. Metadata flags only.
+    </p>
+
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

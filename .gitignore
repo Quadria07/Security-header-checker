@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Zip builds
+*.zip
+
+# Editor
+.vscode/
+.idea/
