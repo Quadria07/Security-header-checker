@@ -11,7 +11,10 @@ const els = {
   footerNotice: $("footer-notice"),
   cookieChecks: $("cookie-checks"),
   warningsList: $("warnings-list"),
-  riskBadge:    $("risk-badge"),
+  riskCard:     $("risk-card"),
+  riskIcon:     $("risk-icon"),
+  riskLevel:    $("risk-level"),
+  riskDesc:     $("risk-desc"),
 
   https: { row: $("row-https"), icon: $("icon-https"), status: $("status-https") },
   csp:   { row: $("row-csp"),   icon: $("icon-csp"),   status: $("status-csp")   },
@@ -20,211 +23,236 @@ const els = {
   xcto:  { row: $("row-xcto"),  icon: $("icon-xcto"),  status: $("status-xcto")  },
 };
 
-// ── State map ─────────────────────────────────────────────────────────────────
+// ── State config ──────────────────────────────────────────────────────────────
 
 const STATE = {
-  ok:   { symbol: "✔", cls: "status-ok",   rowCls: "status-ok-row"   },
-  warn: { symbol: "⚠", cls: "status-warn", rowCls: "status-warn-row" },
-  fail: { symbol: "✘", cls: "status-fail", rowCls: "status-fail-row" },
-  info: { symbol: "–", cls: "status-info", rowCls: "status-info-row" },
+  ok:   { symbol: "✓", cls: "ok"   },
+  warn: { symbol: "!", cls: "warn" },
+  fail: { symbol: "✕", cls: "fail" },
+  info: { symbol: "–", cls: "info" },
 };
 
 // ── Render helpers ────────────────────────────────────────────────────────────
 
-// Updates a static check row (header rows defined in HTML)
 function setCheck(key, state, message) {
   const el    = els[key];
   const entry = STATE[state] ?? STATE.info;
 
-  el.icon.textContent   = entry.symbol;
-  el.icon.className     = `indicator ${entry.cls}`;
+  el.icon.textContent = entry.symbol;
   el.status.textContent = message;
-  el.status.className   = `check-status ${entry.cls}`;
 
-  el.row.classList.remove("status-ok-row", "status-warn-row", "status-fail-row", "status-info-row");
-  el.row.classList.add(entry.rowCls);
+  el.row.className = `check-row ${entry.cls}`;
 }
 
-// Builds and returns a check-row element for dynamic sections (cookies, warnings)
-function makeRow(state, name, message) {
+// Builds a check-row element for dynamic sections (cookies)
+function makeRow(state, name, technicalLabel, message) {
   const entry = STATE[state] ?? STATE.info;
 
-  const row        = document.createElement("div");
-  const icon       = document.createElement("span");
-  const info       = document.createElement("div");
-  const checkName  = document.createElement("div");
-  const checkStatus = document.createElement("div");
+  const row    = document.createElement("div");
+  const badge  = document.createElement("div");
+  const body   = document.createElement("div");
+  const label  = document.createElement("div");
+  const tech   = document.createElement("span");
+  const desc   = document.createElement("div");
 
-  row.className         = `check-row ${entry.rowCls}`;
-  icon.className        = `indicator ${entry.cls}`;
-  icon.textContent      = entry.symbol;
-  info.className        = "info";
-  checkName.className   = "check-name";
-  checkName.textContent = name;
-  checkStatus.className   = `check-status ${entry.cls}`;
-  checkStatus.textContent = message;
+  row.className   = `check-row ${entry.cls}`;
+  badge.className = "check-badge";
+  badge.textContent = entry.symbol;
+  body.className  = "check-body";
+  label.className = "check-name";
+  tech.className  = "check-technical";
+  tech.textContent = technicalLabel;
+  desc.className  = `check-desc`;
+  desc.textContent = message;
 
-  info.appendChild(checkName);
-  info.appendChild(checkStatus);
-  row.appendChild(icon);
-  row.appendChild(info);
+  // Plain name text node first, then the technical pill
+  label.appendChild(document.createTextNode(name + " "));
+  label.appendChild(tech);
+  body.appendChild(label);
+  body.appendChild(desc);
+  row.appendChild(badge);
+  row.appendChild(body);
 
   return row;
 }
 
-// Builds and returns a warning item element
-function makeWarningItem(text, level) {
+// Builds an insight item
+function makeInsight(text, level) {
   const item = document.createElement("div");
-  const cls  = level === "critical" ? "warning-item critical"
-             : level === "pass"     ? "warning-item pass"
-             :                        "warning-item";
-  item.className   = cls;
+  item.className   = `insight-item ${level}`;
   item.textContent = text;
   return item;
+}
+
+// ── Risk card ─────────────────────────────────────────────────────────────────
+
+const RISK_CONFIG = {
+  low: {
+    icon:  "✅",
+    label: "Low Risk",
+    desc:  "This site has good security practices in place.",
+    cls:   "risk-low",
+  },
+  medium: {
+    icon:  "⚠️",
+    label: "Medium Risk",
+    desc:  "Some security protections are missing or misconfigured.",
+    cls:   "risk-medium",
+  },
+  high: {
+    icon:  "🚨",
+    label: "High Risk",
+    desc:  "This site is missing important security protections.",
+    cls:   "risk-high",
+  },
+};
+
+function renderRiskCard(level) {
+  const cfg = RISK_CONFIG[level] ?? RISK_CONFIG.high;
+  els.riskIcon.textContent  = cfg.icon;
+  els.riskLevel.textContent = cfg.label;
+  els.riskDesc.textContent  = cfg.desc;
+  els.riskCard.className    = `risk-card ${cfg.cls}`;
 }
 
 // ── Analysis ──────────────────────────────────────────────────────────────────
 
 function analyseHttps(url) {
   if (url.startsWith("https://")) {
-    setCheck("https", "ok", "Connection is encrypted");
+    setCheck("https", "ok", "Your connection to this site is encrypted");
     return true;
   }
-  setCheck("https", "fail", "Not secure — plain HTTP");
+  setCheck("https", "fail", "This site is not encrypted — data can be intercepted");
   return false;
 }
 
-// Returns findings object consumed by buildWarnings() and calculateRisk()
 function analyseHeaders(data) {
   const found = { csp: false, hsts: false, xfo: false, xcto: false };
 
   if (data.csp) {
-    setCheck("csp", "ok", "Present — controls resource loading sources");
+    setCheck("csp", "ok", "The site controls what scripts are allowed to run");
     found.csp = true;
   } else {
-    setCheck("csp", "fail", "Missing — increases XSS risk");
+    setCheck("csp", "fail", "No policy set — malicious scripts could run on this page");
   }
 
   if (data.hsts) {
     if (data.hsts.toLowerCase().includes("max-age=")) {
-      setCheck("hsts", "ok", "Present with max-age — enforces HTTPS");
+      setCheck("hsts", "ok", "Browser will always use a secure connection to this site");
       found.hsts = true;
     } else {
-      setCheck("hsts", "warn", "Present but missing max-age directive");
+      setCheck("hsts", "warn", "Header present but not fully configured");
     }
   } else {
-    setCheck("hsts", "fail", "Missing — HTTPS not enforced by server");
+    setCheck("hsts", "fail", "Browser is not told to enforce secure connections");
   }
 
   if (data.xfo) {
     const val = data.xfo.toUpperCase();
     if (val === "DENY" || val === "SAMEORIGIN") {
-      setCheck("xfo", "ok", `${data.xfo} — clickjacking protection enabled`);
+      setCheck("xfo", "ok", "Site cannot be embedded inside another page");
       found.xfo = true;
     } else {
-      setCheck("xfo", "warn", "Present but value is non-standard");
+      setCheck("xfo", "warn", "Header present but value is non-standard");
     }
   } else {
-    setCheck("xfo", "fail", "Missing — page may be embeddable in iframes");
+    setCheck("xfo", "fail", "Site could be embedded in fake pages to trick users");
   }
 
   if (data.xcto) {
     if (data.xcto.toLowerCase().trim() === "nosniff") {
-      setCheck("xcto", "ok", "nosniff — MIME sniffing disabled");
+      setCheck("xcto", "ok", "Browser handles file types safely");
       found.xcto = true;
     } else {
-      setCheck("xcto", "warn", "Present but value is not 'nosniff'");
+      setCheck("xcto", "warn", "Header present but value is not 'nosniff'");
     }
   } else {
-    setCheck("xcto", "fail", "Missing — browser may sniff content types");
+    setCheck("xcto", "fail", "Browser may mishandle certain file types");
   }
 
   return found;
 }
 
-// Returns findings object consumed by buildWarnings() and calculateRisk()
 function analyseCookies(summary) {
   els.cookieChecks.replaceChildren();
 
   const found = {
-    hasInsecure:        false,
-    hasMissingSameSite: false,
-    hasMissingHttpOnly: false,
-    total:              0,
+    hasInsecure: false, hasMissingSameSite: false,
+    hasMissingHttpOnly: false, total: 0,
   };
 
   if (summary.error) {
-    els.cookieChecks.appendChild(makeRow("info", "Cookie Access", summary.error));
+    els.cookieChecks.appendChild(makeRow("info", "Cookie access", "", summary.error));
     return found;
   }
 
   if (summary.total === 0) {
-    els.cookieChecks.appendChild(makeRow("info", "Cookies", "No cookies detected on this page"));
+    els.cookieChecks.appendChild(makeRow("info", "No cookies", "", "This page does not use any cookies"));
     return found;
   }
 
   found.total = summary.total;
-  const n     = summary.total;
+  const n = summary.total;
 
-  // Secure flag
   if (summary.insecure === 0) {
-    els.cookieChecks.appendChild(makeRow("ok", "Secure Flag", `All ${n} cookie(s) have Secure flag`));
+    els.cookieChecks.appendChild(makeRow("ok", "Sent securely", "Secure flag", `All ${n} cookie(s) are only sent over encrypted connections`));
   } else {
     found.hasInsecure = true;
-    els.cookieChecks.appendChild(makeRow("fail", "Secure Flag", `${summary.insecure} of ${n} cookie(s) missing Secure flag`));
+    els.cookieChecks.appendChild(makeRow("fail", "Sent insecurely", "Secure flag", `${summary.insecure} of ${n} cookie(s) can be sent over unencrypted connections`));
   }
 
-  // SameSite
   if (summary.missingSameSite === 0) {
-    els.cookieChecks.appendChild(makeRow("ok", "SameSite", `All ${n} cookie(s) have SameSite set`));
+    els.cookieChecks.appendChild(makeRow("ok", "Cross-site protected", "SameSite", `All ${n} cookie(s) are protected from cross-site attacks`));
   } else {
     found.hasMissingSameSite = true;
-    els.cookieChecks.appendChild(makeRow("warn", "SameSite", `${summary.missingSameSite} of ${n} cookie(s) missing SameSite attribute`));
+    els.cookieChecks.appendChild(makeRow("warn", "Cross-site exposure", "SameSite", `${summary.missingSameSite} of ${n} cookie(s) may be sent in cross-site requests`));
   }
 
-  // HttpOnly
   if (summary.missingHttpOnly === 0) {
-    els.cookieChecks.appendChild(makeRow("ok", "HttpOnly", `All ${n} cookie(s) have HttpOnly flag`));
+    els.cookieChecks.appendChild(makeRow("ok", "Hidden from scripts", "HttpOnly", `All ${n} cookie(s) are hidden from JavaScript`));
   } else {
     found.hasMissingHttpOnly = true;
-    els.cookieChecks.appendChild(makeRow("warn", "HttpOnly", `${summary.missingHttpOnly} of ${n} cookie(s) missing HttpOnly flag`));
+    els.cookieChecks.appendChild(makeRow("warn", "Readable by scripts", "HttpOnly", `${summary.missingHttpOnly} of ${n} cookie(s) can be read by JavaScript on the page`));
   }
 
   return found;
 }
 
-// ── Warnings ──────────────────────────────────────────────────────────────────
+// ── Insights ──────────────────────────────────────────────────────────────────
 
-function buildWarnings(isHttps, headerFound, cookieFound) {
+function buildInsights(isHttps, headerFound, cookieFound) {
   els.warningsList.replaceChildren();
 
-  const warnings = [];
+  const items = [];
 
-  if (!isHttps)              warnings.push({ text: "Site is not served over HTTPS — data is transmitted in plaintext",          level: "critical" });
-  if (!headerFound.csp)      warnings.push({ text: "No CSP — no policy restricting which scripts or resources can load",        level: "warn" });
-  if (!headerFound.hsts)     warnings.push({ text: "No HSTS — browser is not told to enforce HTTPS on future visits",          level: "warn" });
-  if (!headerFound.xfo)      warnings.push({ text: "No X-Frame-Options — site may be vulnerable to clickjacking",              level: "warn" });
-  if (!headerFound.xcto)     warnings.push({ text: "No X-Content-Type-Options — browser may misinterpret response types",      level: "warn" });
-  if (cookieFound.hasInsecure)        warnings.push({ text: "Cookies missing Secure flag — may be sent over plain HTTP",       level: "warn" });
-  if (cookieFound.hasMissingSameSite) warnings.push({ text: "Cookies missing SameSite — increased cross-site request risk",    level: "warn" });
-  if (cookieFound.hasMissingHttpOnly) warnings.push({ text: "Cookies missing HttpOnly — readable by JavaScript on the page",   level: "warn" });
+  if (!isHttps)
+    items.push({ text: "🚨 This site uses plain HTTP — anyone on your network could see or intercept your data", level: "critical" });
+  if (!headerFound.csp)
+    items.push({ text: "⚠ No content policy — the site doesn't restrict which scripts can run, increasing XSS risk", level: "warn" });
+  if (!headerFound.hsts)
+    items.push({ text: "⚠ No HTTPS enforcement — your browser isn't told to always use a secure connection here", level: "warn" });
+  if (!headerFound.xfo)
+    items.push({ text: "⚠ No iframe protection — this page could be embedded in a fake site to trick you into clicking things", level: "warn" });
+  if (!headerFound.xcto)
+    items.push({ text: "⚠ No file type protection — the browser might mishandle certain file types served by this site", level: "warn" });
+  if (cookieFound.hasInsecure)
+    items.push({ text: "⚠ Some cookies can travel over unencrypted connections — session data may be exposed", level: "warn" });
+  if (cookieFound.hasMissingSameSite)
+    items.push({ text: "⚠ Some cookies lack cross-site protection — they could be sent in requests from other websites", level: "warn" });
+  if (cookieFound.hasMissingHttpOnly)
+    items.push({ text: "⚠ Some cookies are readable by JavaScript — if a script is compromised, cookies could be stolen", level: "warn" });
 
-  if (warnings.length === 0) {
-    els.warningsList.appendChild(makeWarningItem("No major issues detected based on available data", "pass"));
+  if (items.length === 0) {
+    els.warningsList.appendChild(makeInsight("✓ No major issues detected — this site has solid security headers in place", "pass"));
     return;
   }
 
-  for (const w of warnings) {
-    els.warningsList.appendChild(makeWarningItem(w.text, w.level));
+  for (const item of items) {
+    els.warningsList.appendChild(makeInsight(item.text, item.level));
   }
 }
 
-// ── Risk level ────────────────────────────────────────────────────────────────
-//
-// Three buckets — simple and explainable.
-// High   → no HTTPS at all
-// Medium → HTTPS but one or more issues detected
-// Low    → HTTPS and no issues found
+// ── Risk calculation ──────────────────────────────────────────────────────────
 
 function calculateRisk(isHttps, headerFound, cookieFound) {
   if (!isHttps) return "high";
@@ -244,28 +272,21 @@ function calculateRisk(isHttps, headerFound, cookieFound) {
   return "low";
 }
 
-function renderRiskBadge(level) {
-  const labels = { low: "Low Risk", medium: "Medium Risk", high: "High Risk" };
-  els.riskBadge.textContent = labels[level] ?? "";
-  els.riskBadge.className   = `risk-badge visible risk-${level}`;
-}
-
-// ── Fallback states ───────────────────────────────────────────────────────────
+// ── Fallbacks ─────────────────────────────────────────────────────────────────
 
 function setHeadersNotApplicable(message) {
-  ["csp", "hsts", "xfo", "xcto"].forEach((key) => setCheck(key, "info", message));
+  ["csp", "hsts", "xfo", "xcto"].forEach((k) => setCheck(k, "info", message));
 }
 
 function setHeadersNoData() {
-  ["csp", "hsts", "xfo", "xcto"].forEach((key) =>
-    setCheck(key, "warn", "No data — reload the page to capture headers")
+  ["csp", "hsts", "xfo", "xcto"].forEach((k) =>
+    setCheck(k, "warn", "No data — reload the page to capture headers")
   );
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function run() {
-  // 1. Get active tab from Chrome API (trusted source — not user input)
   let tab;
   try {
     [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -276,7 +297,6 @@ async function run() {
 
   const url = tab?.url ?? "";
 
-  // 2. Validate — only http/https pages are checkable
   let parsed;
   try {
     parsed = new URL(url);
@@ -290,34 +310,30 @@ async function run() {
     return;
   }
 
-  // 3. Show URL safely — textContent only, never innerHTML
-  els.urlDisplay.textContent = url.length > 65 ? url.slice(0, 62) + "…" : url;
+  els.urlDisplay.textContent = url.length > 60 ? url.slice(0, 57) + "…" : url;
 
-  // 4. HTTPS check
   const isHttps = analyseHttps(url);
 
-  // 5. Header results from background worker
   let headerFound = { csp: false, hsts: false, xfo: false, xcto: false };
 
   if (!isHttps) {
-    setHeadersNotApplicable("Only checked over HTTPS");
+    setHeadersNotApplicable("Only checked on encrypted (HTTPS) sites");
   } else {
     let headerData = null;
     try {
       const res = await chrome.runtime.sendMessage({ type: "GET_HEADERS", tabId: tab.id });
       headerData = res?.data ?? null;
-    } catch { /* service worker may not be ready on first install */ }
+    } catch { /* service worker not ready */ }
 
     if (!headerData) {
       setHeadersNoData();
-      showResults("Reload the page to capture live response headers.");
+      showResults("Reload this page to capture live security headers.");
       return;
     }
 
     headerFound = analyseHeaders(headerData);
   }
 
-  // 6. Cookie results from background worker
   let cookieFound = {
     hasInsecure: false, hasMissingSameSite: false,
     hasMissingHttpOnly: false, total: 0,
@@ -327,16 +343,15 @@ async function run() {
     const res = await chrome.runtime.sendMessage({ type: "GET_COOKIES", url });
     if (res?.data) cookieFound = analyseCookies(res.data);
   } catch {
-    els.cookieChecks.appendChild(makeRow("info", "Cookies", "Could not retrieve cookie data"));
+    els.cookieChecks.appendChild(makeRow("info", "Cookie check", "", "Could not retrieve cookie data"));
   }
 
-  // 7. Warnings, risk badge, done
-  buildWarnings(isHttps, headerFound, cookieFound);
-  renderRiskBadge(calculateRisk(isHttps, headerFound, cookieFound));
+  buildInsights(isHttps, headerFound, cookieFound);
+  renderRiskCard(calculateRisk(isHttps, headerFound, cookieFound));
   showResults(null);
 }
 
-// ── UI state ──────────────────────────────────────────────────────────────────
+// ── UI helpers ────────────────────────────────────────────────────────────────
 
 function showResults(notice) {
   els.loading.hidden = true;
@@ -351,7 +366,10 @@ function showResults(notice) {
 }
 
 function showError(message) {
-  els.loading.textContent = message;
+  const text = document.createElement("p");
+  text.textContent = message;
+  text.style.cssText = "color:#6e7681;font-size:12px;text-align:center;padding:48px 16px;";
+  els.loading.replaceChildren(text);
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
